@@ -25,12 +25,8 @@ def KeyScheduler(key, key_length):
             random_word = random.randint(0, 2**32 - 1)
             tmp_key_i = (key_blocks[-1]&0xFF000000) >> 24 | (key_blocks[-1]&0x00FFFFFF) << 8
 
-
             share1 = tmp_key_i ^ random_word
             share2 = random_word
-
-            # share1_tmp = (share1 & 0xFFFFFF00) >> 8 | (share1 & 0x000000FF) << 24
-            # share2_tmp = (share2 & 0xFFFFFF00) >> 8 | (share2 & 0x000000FF) << 24
 
             key_blocks.append(0)
             key_blocks[-1] = aes32esi(share1, share2, key_blocks[-1], bs = BYTE0)
@@ -57,7 +53,7 @@ def KeyScheduler(key, key_length):
     return key_blocks
 
 def create_shares(share1: list):
-    random_values = [0x02020202, 0x02020202, 0x02020202, 0x02020202] #[random.randint(0, 2**(31)-1) for _ in range(4)]
+    random_values = [random.randint(0, 2**(31)-1) for _ in range(4)]
 
     share2 = [0,0,0,0]
 
@@ -82,9 +78,6 @@ def encrypt(plaintext, round_keys, key_length):
     share1[3] = plaintext[3] ^ round_keys[3]
 
     share1, share2 = create_shares(share1)
-    print(f"keybytes     = {round_keys[0]:08x} {round_keys[1]:08x} {round_keys[2]:08x} {round_keys[3]:08x}")
-    print(f"msg          = {plaintext[0]:08x} {plaintext[1]:08x} {plaintext[2]:08x} {plaintext[3]:08x}")
-    print(f"cipher1(xor) = {share1[0]:08x} {share1[1]:08x} {share1[2]:08x} {share1[3]:08x}\n")
 
     for i in range(rounds - 1):
         if i != 0: 
@@ -93,13 +86,8 @@ def encrypt(plaintext, round_keys, key_length):
         round_key_tmp = [round_keys[(i+1)*4 + 0], round_keys[(i+1)*4 + 1], round_keys[(i+1)*4 + 2], round_keys[(i+1)*4 + 3]]
         share1_tmp    = [share1[0], share1[1],share1[2],share1[3]]
         share2_tmp    = [share2[0], share2[1],share2[2],share2[3]]
-        print(f"keybytes = {round_key_tmp[0]:08x} {round_key_tmp[1]:08x} {round_key_tmp[2]:08x} {round_key_tmp[3]:08x}")
-        print(f"share_a  = {share1_tmp[0]:08x} {share1_tmp[1]:08x} {share1_tmp[2]:08x} {share1_tmp[3]:08x}")
-        print(f"share_b  = {share2_tmp[0]:08x} {share2_tmp[1]:08x} {share2_tmp[2]:08x} {share2_tmp[3]:08x}\n")
-
 
         round_key_tmp[0] = aes32esmi(share1_tmp[0], share2_tmp[0], round_key_tmp[0], bs = BYTE0)
-        # exit()
         round_key_tmp[0] = aes32esmi(share1_tmp[1], share2_tmp[1], round_key_tmp[0], bs = BYTE1)
         round_key_tmp[0] = aes32esmi(share1_tmp[2], share2_tmp[2], round_key_tmp[0], bs = BYTE2)
         share1[0]        = aes32esmi(share1_tmp[3], share2_tmp[3], round_key_tmp[0], bs = BYTE3)
@@ -118,7 +106,6 @@ def encrypt(plaintext, round_keys, key_length):
         round_key_tmp[3] = aes32esmi(share1_tmp[0], share2_tmp[0], round_key_tmp[3], bs = BYTE1)
         round_key_tmp[3] = aes32esmi(share1_tmp[1], share2_tmp[1], round_key_tmp[3], bs = BYTE2)
         share1[3]        = aes32esmi(share1_tmp[2], share2_tmp[2], round_key_tmp[3], bs = BYTE3)
-        print(f"Encrypted block: {share1[0] :08x} {share1[1] :08x} {share1[2] :08x} {share1[3] :08x}")
     
     share1, share2 = create_shares(share1)      
 

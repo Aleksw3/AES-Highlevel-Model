@@ -68,11 +68,7 @@ class KeyScheduler:
         _test_key  = 0x0f1571c947d9e8590cb7add6af7f6798
         _test_length = 128
         test_keys = self.key_scheduler(key_length = _test_length, key = _test_key)
-        # tmp = ""
-        # for i, round in enumerate(test_keys):
-        #     tmp += f"\n{i//4}- " if i % 4 == 0 else ""
-        #     tmp+= f"{round:x} "
-        # print(tmp)
+
         assert(test_keys[4] == 0xdc9037b0)
         assert(test_keys[5] == 0x9b49dfe9)
         assert(test_keys[6] == 0x97fe723f)
@@ -195,7 +191,6 @@ class AES:
             assert(len(b) == 4)
             t = [0,0,0,0]
 
-            ##! Rename b and col to better names following the polynomial
             t[0] = b[0] ^ col[3] ^ col[2] ^ b[1] ^ col[1] # 2a0 + a3 + a2 + 3a1
             t[1] = b[1] ^ col[0] ^ col[3] ^ b[2] ^ col[2] # 2a1 + a0 + a3 + 3a2
             t[2] = b[2] ^ col[1] ^ col[0] ^ b[3] ^ col[3] # 2a2 + a1 + a0 + 3a3
@@ -246,7 +241,6 @@ class AES:
             t[2] = d[2]^c[2]^b[2]   ^ d[1]^a[1]  ^ d[0]^c[0]^a[0] ^ d[3]^b[3]^a[3] #14*a2 + 9*a1 + 13*a0 + 11*a3 
             t[3] = d[3]^c[3]^b[3]   ^ d[2]^a[2]  ^ d[1]^c[1]^a[1] ^ d[0]^b[0]^a[0] #14*a3 + 9*a2 + 13*a1 + 11*a0
             
-            # print("".join(f"{byte :x} " for byte in t))
             new_msg[col_idx*4:col_idx*4+4] = t
             for col_v in t:
                 assert(col_v <= 255)
@@ -291,7 +285,6 @@ class AES:
         
 
 if __name__ == "__main__":
-    # msg = "Hello World!"
     msg = "Two One Nine Two"
     key = 0x5468617473206d79204b756e67204675
     key_length = 128
