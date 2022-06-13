@@ -260,22 +260,10 @@ class SBox:
 def main():
 
     inversion = False
-    error_count = 0
-    for i in range(255):
-        byte = i
-        sub_byte = SBox(byte, inverse = inversion)
-        if inversion:
-            correct_sub_byte = sbox_inv[byte]
-        else:
-            correct_sub_byte = sbox[byte]
+    byte = 10
 
-        if correct_sub_byte == sub_byte:
-            print(f"Woo correct! {i:03} {sub_byte:02x} == {correct_sub_byte:02x}")
-        else:
-            print(f"Not correct! {i:03} {sub_byte:02x} != {correct_sub_byte:02x}")
-            error_count += 1
-
-    print(f"Total number of errors: {error_count}")
+    sub_byte = SBox(byte, inverse = inversion)
+    print(f"Input = {byte:02x} SubByte = {sub_byte:02x}")
 
 
 

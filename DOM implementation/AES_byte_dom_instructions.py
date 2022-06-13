@@ -13,10 +13,8 @@ def aes(rs1, rs2, rs3, bs: uint2, is_decrypt: bool, is_middle_round: bool):
     share1_byte = (rs2 >> ((3-bs)*8) )& 0xFF
     share2_byte = (rs3 >> ((3-bs)*8) )& 0xFF
 
-    # print(f"Share a = {share1_byte:02x} {share2_byte:02x}")
     sub_bytes = SBox(share1_byte, share2_byte, inverse = is_decrypt)
     assert(sub_bytes.share1 <= 0xFF and sub_bytes.share2 <= 0xFF)
-    # print(f"Share a = {sub_bytes.share1:02x} {sub_bytes.share2:02x}")
 
     share1_mix_b3   = xtimeN(sub_bytes.share1, 0x0b  if is_decrypt else 3)
     share1_mix_b2   = xtimeN(sub_bytes.share1, 0x0d) if is_decrypt else sub_bytes.share1
@@ -32,8 +30,6 @@ def aes(rs1, rs2, rs3, bs: uint2, is_decrypt: bool, is_middle_round: bool):
 
     share1_mix = share1_mixed if is_middle_round else sub_bytes.share1
     share2_mix = share2_mixed if is_middle_round else sub_bytes.share2
-    # print(f"share1 mix: {share1_mix:08x}")
-    # print(f"share2 mix: {share2_mix:08x}")
 
     share1_rotated_tmp = share1_mix if bs == 0 else \
               (share1_mix&0x00FFFFFF) << 8  |  (share1_mix&0xFF000000) >> 24 if bs == 1 else \
@@ -47,13 +43,10 @@ def aes(rs1, rs2, rs3, bs: uint2, is_decrypt: bool, is_middle_round: bool):
     share1_rotated = ((share1_rotated_tmp&0xFF000000)>>24) | ((share1_rotated_tmp&0x00FF0000)>>8) | ((share1_rotated_tmp&0x0000FF00)<<8) | ((share1_rotated_tmp&0x000000FF)<<24)
     share2_rotated = ((share2_rotated_tmp&0xFF000000)>>24) | ((share2_rotated_tmp&0x00FF0000)>>8) | ((share2_rotated_tmp&0x0000FF00)<<8) | ((share2_rotated_tmp&0x000000FF)<<24)
 
-    assert share1_rotated != -1 and share2_rotated != -1
-    # print(f"share1 rotated: {share1_rotated:08x}")
-    # print(f"share2 rotated: {share2_rotated:08x}")
+    assert share1_rotated_tmp != -1 and share2_rotated_tmp != -1
+
     key_addition = share1_rotated ^ rs1
     result = key_addition ^ share2_rotated
-    # print(f"key addition: {key_addition:08x}")
-    # print(f"result = {result:08x}")
 
     return result
 
