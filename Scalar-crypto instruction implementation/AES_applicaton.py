@@ -38,7 +38,7 @@ def KeyScheduler(key, key_length):
             key_blocks.append(key[i])
             
         elif i >= N and i % N == 0:
-            tmp_key_i = (key_blocks[-1]&0xFF000000) >> 24 | (key_blocks[-1]&0x00FFFFFF) << 8
+            tmp_key_i = (key_blocks[-1]&0xFFFFFF00) >> 8 | (key_blocks[-1]&0x000000FF) << 24
 
             key_blocks.append(0)
             key_blocks[-1] = aes32esi(tmp_key_i, key_blocks[-1], bs = BYTE0)
@@ -46,7 +46,7 @@ def KeyScheduler(key, key_length):
             key_blocks[-1] = aes32esi(tmp_key_i, key_blocks[-1], bs = BYTE2)
             key_blocks[-1] = aes32esi(tmp_key_i, key_blocks[-1], bs = BYTE3)
 
-            key_blocks[-1] = key_blocks[-1] ^ (rcon[(i//N) - 1] << 24)
+            key_blocks[-1] = key_blocks[-1] ^ rcon[(i//N) - 1]
 
             key_blocks[-1] = key_blocks[-1] ^ key_blocks[i-N]
 
@@ -186,8 +186,9 @@ def decrypt(ciphertext, round_keys, key_length):
     return cipher
 
 if __name__ == "__main__":
-    column_i = [0x00112233, 0x44556677,0x8899aabb, 0xccddeeff]
-    key = [0x00010203, 0x04050607, 0x08090a0b, 0x0c0d0e0f]
+    column_i = [0x33221100, 0x77665544, 0xbbaa9988, 0xffeeddcc]
+    key = [0x03020100, 0x07060504, 0x0b0a0908, 0x0f0e0d0c]
+    fips_197_c1_cipher = [0xd8e0c469, 0x30047b6a, 0x80b7cdd8, 0x5ac5b470]
 
     key_length = len(key) * 32
     round_keys    = KeyScheduler(key, key_length)
@@ -199,4 +200,5 @@ if __name__ == "__main__":
     inverse_mix_col_keys    = InvMixColKey(round_keys, key_length)
     plaintext               = decrypt(cipher, inverse_mix_col_keys, key_length)
     
+    print(f"Does the cipher match FIPS-197 C.1? {cipher == fips_197_c1_cipher}")
     print(f"Is encryption/decryption correct? {plaintext == column_i}")

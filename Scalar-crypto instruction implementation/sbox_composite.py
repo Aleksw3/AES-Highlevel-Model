@@ -1,3 +1,5 @@
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+"/Shared")
 from pickletools import uint2, uint4, uint8
 from sbox import s_box as sbox, inv_s_box as sbox_inv
 

@@ -247,7 +247,7 @@ class SBox:
 
             
         def dom_multiplication(shareA_l, shareA_h, shareB_l, shareB_h):
-            additional_random = 0#random.randint(0, 15)
+            additional_random = random.randint(0, 15)
             AA_hl_mult = SBox.GF16.multiplication(shareA_h, shareA_l)
             AB_hl_mult = SBox.GF16.multiplication(shareA_h, shareB_l)
             BB_hl_mult = SBox.GF16.multiplication(shareB_h, shareB_l)
@@ -331,7 +331,7 @@ class SBox:
             return result_h << 1 | result_l
 
         def dom_multiplication(shareA_l, shareA_h, shareB_l, shareB_h):
-            additional_random = 0#random.randint(0, 3)
+            additional_random = random.randint(0, 3)
             AA_hl_mult = SBox.GF4.multiplication(shareA_h, shareA_l)
             AB_hl_mult = SBox.GF4.multiplication(shareA_h, shareB_l)
             BB_hl_mult = SBox.GF4.multiplication(shareB_h, shareB_l)

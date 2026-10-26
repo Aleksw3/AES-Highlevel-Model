@@ -1,3 +1,5 @@
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+"/Shared")
 from sbox import s_box, inv_s_box
 
 class KeyScheduler:
@@ -201,7 +203,6 @@ class AES:
                 assert(col_v <= 255)
 
         return new_msg
-    @staticmethod
     def InvMixColumns(self, msg):
         new_msg = msg[:]
         assert(len(new_msg) == 128 //8)
@@ -247,12 +248,10 @@ class AES:
 
         return new_msg
 
-    @staticmethod
     def InvSubBytes(self, msg):
         assert(len(msg) == 128//8)
         return [inv_s_box[byte] for byte in msg]
     
-    @staticmethod
     def InvShiftBytes(self, msg):
         assert(len(msg) == 128//8)
         for i in range(1, 4): # 4 Rows

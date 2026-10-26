@@ -10,215 +10,190 @@ BYTE1 = 1
 BYTE2 = 2
 BYTE3 = 3
 
+def mask(word):
+    random_word = random.randint(0, 2**32 - 1)
+    return word ^ random_word, random_word
+
+def unmask(shares: tuple):
+    return shares[0] ^ shares[1]
+
+def refresh(shares: tuple):
+    random_word = random.randint(0, 2**32 - 1)
+    return shares[0] ^ random_word, shares[1] ^ random_word
+
+def xor_shares(a: tuple, b: tuple):
+    return a[0] ^ b[0], a[1] ^ b[1]
+
+def rotate_word(shares: tuple):
+    return tuple((share&0xFFFFFF00) >> 8 | (share&0x000000FF) << 24 for share in shares)
+
 rcon = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36]
 def KeyScheduler(key, key_length):
     rounds = 10 if key_length == 128 else 12 if key_length == 192 else 14
 
     number_of_words_in_key = key_length // 32
     key_blocks = []
-    
+
     for i in range((rounds+1)*4):
         if i < number_of_words_in_key:
-            key_blocks.append(key[i])
-            
+            key_blocks.append(mask(key[i]))
+
         elif i >= number_of_words_in_key and i % number_of_words_in_key == 0:
-            random_word = random.randint(0, 2**32 - 1)
-            tmp_key_i = (key_blocks[-1]&0xFF000000) >> 24 | (key_blocks[-1]&0x00FFFFFF) << 8
+            tmp_key_i = rotate_word(key_blocks[-1])
 
-            share1 = tmp_key_i ^ random_word
-            share2 = random_word
+            key_blocks.append((0, 0))
+            key_blocks[-1] = aes32esi(tmp_key_i, key_blocks[-1], bs = BYTE0)
+            key_blocks[-1] = aes32esi(tmp_key_i, key_blocks[-1], bs = BYTE1)
+            key_blocks[-1] = aes32esi(tmp_key_i, key_blocks[-1], bs = BYTE2)
+            key_blocks[-1] = aes32esi(tmp_key_i, key_blocks[-1], bs = BYTE3)
 
-            key_blocks.append(0)
-            key_blocks[-1] = aes32esi(share1, share2, key_blocks[-1], bs = BYTE0)
-            key_blocks[-1] = aes32esi(share1, share2, key_blocks[-1], bs = BYTE1)
-            key_blocks[-1] = aes32esi(share1, share2, key_blocks[-1], bs = BYTE2)
-            key_blocks[-1] = aes32esi(share1, share2, key_blocks[-1], bs = BYTE3)
-
-            key_blocks[-1] = key_blocks[-1] ^ (rcon[(i//number_of_words_in_key) - 1] << 24)
-            key_blocks[-1] = key_blocks[-1] ^ key_blocks[i - number_of_words_in_key]
+            key_blocks[-1] = xor_shares(key_blocks[-1], (rcon[(i//number_of_words_in_key) - 1], 0))
+            key_blocks[-1] = xor_shares(key_blocks[-1], key_blocks[i - number_of_words_in_key])
 
         elif i >= number_of_words_in_key and number_of_words_in_key > 6 and i % number_of_words_in_key == 4:
-            random_word = random.randint(0, 2**32 - 1)
-            share1 = key_blocks[-1] ^ random_word
-            share2 = random_word
-            key_blocks.append(0)
-            key_blocks[-1] = aes32esi(share1, share2, key_blocks[-1], bs = BYTE0)
-            key_blocks[-1] = aes32esi(share1, share2, key_blocks[-1], bs = BYTE1)
-            key_blocks[-1] = aes32esi(share1, share2, key_blocks[-1], bs = BYTE2)
-            key_blocks[-1] = aes32esi(share1, share2, key_blocks[-1], bs = BYTE3)
+            tmp_key_i = key_blocks[-1]
+
+            key_blocks.append((0, 0))
+            key_blocks[-1] = aes32esi(tmp_key_i, key_blocks[-1], bs = BYTE0)
+            key_blocks[-1] = aes32esi(tmp_key_i, key_blocks[-1], bs = BYTE1)
+            key_blocks[-1] = aes32esi(tmp_key_i, key_blocks[-1], bs = BYTE2)
+            key_blocks[-1] = aes32esi(tmp_key_i, key_blocks[-1], bs = BYTE3)
+            key_blocks[-1] = xor_shares(key_blocks[-1], key_blocks[i - number_of_words_in_key])
 
         else:
-            key_blocks.append(key_blocks[-1]^ key_blocks[-number_of_words_in_key])
+            key_blocks.append(xor_shares(key_blocks[-1], key_blocks[-number_of_words_in_key]))
 
     return key_blocks
 
-def create_shares(share1: list):
-    random_values = [random.randint(0, 2**(31)-1) for _ in range(4)]
+def InvMixColKey(keys:list, key_length:int):
+    result = []
+    for i, word in enumerate(keys):
+        if i < 4 or i >= len(keys) - 4:
+            result.append(word)
+        else:
+            tmp = (0, 0)
+            tmp = aes32esi(word, tmp, bs = BYTE0)
+            tmp = aes32esi(word, tmp, bs = BYTE1)
+            tmp = aes32esi(word, tmp, bs = BYTE2)
+            tmp = aes32esi(word, tmp, bs = BYTE3)
 
-    share2 = [0,0,0,0]
+            result.append((0, 0))
+            result[-1] = aes32dsmi(tmp, result[-1], bs = BYTE0)
+            result[-1] = aes32dsmi(tmp, result[-1], bs = BYTE1)
+            result[-1] = aes32dsmi(tmp, result[-1], bs = BYTE2)
+            result[-1] = aes32dsmi(tmp, result[-1], bs = BYTE3)
 
-    share1[0]^= random_values[0]
-    share1[1]^= random_values[1]
-    share1[2]^= random_values[2]
-    share1[3]^= random_values[3]
-
-    share2[0] = random_values[0]
-    share2[1] = random_values[1]
-    share2[2] = random_values[2]
-    share2[3] = random_values[3]  
-
-    return share1, share2
+    return result
 
 def encrypt(plaintext, round_keys, key_length):
     rounds = 10 if key_length == 128 else 12 if key_length == 192 else 14
-    share1 = [0,0,0,0]
-    share1[0] = plaintext[0] ^ round_keys[0]
-    share1[1] = plaintext[1] ^ round_keys[1]
-    share1[2] = plaintext[2] ^ round_keys[2]
-    share1[3] = plaintext[3] ^ round_keys[3]
-
-    share1, share2 = create_shares(share1)
+    state = [xor_shares(mask(plaintext[i]), round_keys[i]) for i in range(4)]
 
     for i in range(rounds - 1):
-        if i != 0: 
-            create_shares(share1)      
-      
+        state = [refresh(column) for column in state]
         round_key_tmp = [round_keys[(i+1)*4 + 0], round_keys[(i+1)*4 + 1], round_keys[(i+1)*4 + 2], round_keys[(i+1)*4 + 3]]
-        share1_tmp    = [share1[0], share1[1],share1[2],share1[3]]
-        share2_tmp    = [share2[0], share2[1],share2[2],share2[3]]
 
-        round_key_tmp[0] = aes32esmi(share1_tmp[0], share2_tmp[0], round_key_tmp[0], bs = BYTE0)
-        round_key_tmp[0] = aes32esmi(share1_tmp[1], share2_tmp[1], round_key_tmp[0], bs = BYTE1)
-        round_key_tmp[0] = aes32esmi(share1_tmp[2], share2_tmp[2], round_key_tmp[0], bs = BYTE2)
-        share1[0]        = aes32esmi(share1_tmp[3], share2_tmp[3], round_key_tmp[0], bs = BYTE3)
+        round_key_tmp[0] = aes32esmi(state[0], round_key_tmp[0], bs = BYTE0)
+        round_key_tmp[0] = aes32esmi(state[1], round_key_tmp[0], bs = BYTE1)
+        round_key_tmp[0] = aes32esmi(state[2], round_key_tmp[0], bs = BYTE2)
+        round_key_tmp[0] = aes32esmi(state[3], round_key_tmp[0], bs = BYTE3)
 
-        round_key_tmp[1] = aes32esmi(share1_tmp[1], share2_tmp[1], round_key_tmp[1], bs = BYTE0)
-        round_key_tmp[1] = aes32esmi(share1_tmp[2], share2_tmp[2], round_key_tmp[1], bs = BYTE1)
-        round_key_tmp[1] = aes32esmi(share1_tmp[3], share2_tmp[3], round_key_tmp[1], bs = BYTE2)
-        share1[1]        = aes32esmi(share1_tmp[0], share2_tmp[0], round_key_tmp[1], bs = BYTE3)
+        round_key_tmp[1] = aes32esmi(state[1], round_key_tmp[1], bs = BYTE0)
+        round_key_tmp[1] = aes32esmi(state[2], round_key_tmp[1], bs = BYTE1)
+        round_key_tmp[1] = aes32esmi(state[3], round_key_tmp[1], bs = BYTE2)
+        round_key_tmp[1] = aes32esmi(state[0], round_key_tmp[1], bs = BYTE3)
 
-        round_key_tmp[2] = aes32esmi(share1_tmp[2], share2_tmp[2], round_key_tmp[2], bs = BYTE0)
-        round_key_tmp[2] = aes32esmi(share1_tmp[3], share2_tmp[3], round_key_tmp[2], bs = BYTE1)
-        round_key_tmp[2] = aes32esmi(share1_tmp[0], share2_tmp[0], round_key_tmp[2], bs = BYTE2)
-        share1[2]        = aes32esmi(share1_tmp[1], share2_tmp[1], round_key_tmp[2], bs = BYTE3)
-        
-        round_key_tmp[3] = aes32esmi(share1_tmp[3], share2_tmp[3], round_key_tmp[3], bs = BYTE0)
-        round_key_tmp[3] = aes32esmi(share1_tmp[0], share2_tmp[0], round_key_tmp[3], bs = BYTE1)
-        round_key_tmp[3] = aes32esmi(share1_tmp[1], share2_tmp[1], round_key_tmp[3], bs = BYTE2)
-        share1[3]        = aes32esmi(share1_tmp[2], share2_tmp[2], round_key_tmp[3], bs = BYTE3)
-    
-    share1, share2 = create_shares(share1)      
+        round_key_tmp[2] = aes32esmi(state[2], round_key_tmp[2], bs = BYTE0)
+        round_key_tmp[2] = aes32esmi(state[3], round_key_tmp[2], bs = BYTE1)
+        round_key_tmp[2] = aes32esmi(state[0], round_key_tmp[2], bs = BYTE2)
+        round_key_tmp[2] = aes32esmi(state[1], round_key_tmp[2], bs = BYTE3)
 
+        round_key_tmp[3] = aes32esmi(state[3], round_key_tmp[3], bs = BYTE0)
+        round_key_tmp[3] = aes32esmi(state[0], round_key_tmp[3], bs = BYTE1)
+        round_key_tmp[3] = aes32esmi(state[1], round_key_tmp[3], bs = BYTE2)
+        round_key_tmp[3] = aes32esmi(state[2], round_key_tmp[3], bs = BYTE3)
+
+        state = round_key_tmp
+
+    state = [refresh(column) for column in state]
     round_key_tmp = [round_keys[rounds*4 + 0], round_keys[rounds*4 + 1], round_keys[rounds*4 + 2], round_keys[rounds*4 + 3]]
-    share1_tmp    = [share1[0], share1[1],share1[2],share1[3]]
-    share2_tmp    = [share2[0], share2[1],share2[2],share2[3]]
-    
-    round_key_tmp[0] = aes32esi(share1_tmp[0], share2_tmp[0], round_key_tmp[0], bs = BYTE0)
-    round_key_tmp[0] = aes32esi(share1_tmp[1], share2_tmp[1], round_key_tmp[0], bs = BYTE1)
-    round_key_tmp[0] = aes32esi(share1_tmp[2], share2_tmp[2], round_key_tmp[0], bs = BYTE2)
-    share1[0]        = aes32esi(share1_tmp[3], share2_tmp[3], round_key_tmp[0], bs = BYTE3)
 
-    round_key_tmp[1] = aes32esi(share1_tmp[1], share2_tmp[1], round_key_tmp[1], bs = BYTE0)
-    round_key_tmp[1] = aes32esi(share1_tmp[2], share2_tmp[2], round_key_tmp[1], bs = BYTE1)
-    round_key_tmp[1] = aes32esi(share1_tmp[3], share2_tmp[3], round_key_tmp[1], bs = BYTE2)
-    share1[1]        = aes32esi(share1_tmp[0], share2_tmp[0], round_key_tmp[1], bs = BYTE3)
+    round_key_tmp[0] = aes32esi(state[0], round_key_tmp[0], bs = BYTE0)
+    round_key_tmp[0] = aes32esi(state[1], round_key_tmp[0], bs = BYTE1)
+    round_key_tmp[0] = aes32esi(state[2], round_key_tmp[0], bs = BYTE2)
+    round_key_tmp[0] = aes32esi(state[3], round_key_tmp[0], bs = BYTE3)
 
-    round_key_tmp[2] = aes32esi(share1_tmp[2], share2_tmp[2], round_key_tmp[2], bs = BYTE0)
-    round_key_tmp[2] = aes32esi(share1_tmp[3], share2_tmp[3], round_key_tmp[2], bs = BYTE1)
-    round_key_tmp[2] = aes32esi(share1_tmp[0], share2_tmp[0], round_key_tmp[2], bs = BYTE2)
-    share1[2]        = aes32esi(share1_tmp[1], share2_tmp[1], round_key_tmp[2], bs = BYTE3)
-    
-    round_key_tmp[3] = aes32esi(share1_tmp[3], share2_tmp[3], round_key_tmp[3], bs = BYTE0)
-    round_key_tmp[3] = aes32esi(share1_tmp[0], share2_tmp[0], round_key_tmp[3], bs = BYTE1)
-    round_key_tmp[3] = aes32esi(share1_tmp[1], share2_tmp[1], round_key_tmp[3], bs = BYTE2)
-    share1[3]        = aes32esi(share1_tmp[2], share2_tmp[2], round_key_tmp[3], bs = BYTE3)
+    round_key_tmp[1] = aes32esi(state[1], round_key_tmp[1], bs = BYTE0)
+    round_key_tmp[1] = aes32esi(state[2], round_key_tmp[1], bs = BYTE1)
+    round_key_tmp[1] = aes32esi(state[3], round_key_tmp[1], bs = BYTE2)
+    round_key_tmp[1] = aes32esi(state[0], round_key_tmp[1], bs = BYTE3)
 
-    return share1
+    round_key_tmp[2] = aes32esi(state[2], round_key_tmp[2], bs = BYTE0)
+    round_key_tmp[2] = aes32esi(state[3], round_key_tmp[2], bs = BYTE1)
+    round_key_tmp[2] = aes32esi(state[0], round_key_tmp[2], bs = BYTE2)
+    round_key_tmp[2] = aes32esi(state[1], round_key_tmp[2], bs = BYTE3)
+
+    round_key_tmp[3] = aes32esi(state[3], round_key_tmp[3], bs = BYTE0)
+    round_key_tmp[3] = aes32esi(state[0], round_key_tmp[3], bs = BYTE1)
+    round_key_tmp[3] = aes32esi(state[1], round_key_tmp[3], bs = BYTE2)
+    round_key_tmp[3] = aes32esi(state[2], round_key_tmp[3], bs = BYTE3)
+
+    return [unmask(column) for column in round_key_tmp]
 
 def decrypt(ciphertext, round_keys, key_length):
     rounds = 10 if key_length == 128 else 12 if key_length == 192 else 14
-
-    share1 = [0,0,0,0]
-    share2 = [0,0,0,0]
-
-    share1[0] = round_keys[rounds*4 + 0] ^ ciphertext[0]
-    share1[1] = round_keys[rounds*4 + 1] ^ ciphertext[1]
-    share1[2] = round_keys[rounds*4 + 2] ^ ciphertext[2]
-    share1[3] = round_keys[rounds*4 + 3] ^ ciphertext[3]
+    state = [xor_shares(mask(ciphertext[i]), round_keys[rounds*4 + i]) for i in range(4)]
 
     for i in range(rounds - 1)[::-1]:
-        random_values = [random.randint(0, 2**(31)-1) for _ in range(4)]
-
-        share1[0]^= random_values[0]
-        share1[1]^= random_values[1]
-        share1[2]^= random_values[2]
-        share1[3]^= random_values[3]
-
-        share2[0] = random_values[0]
-        share2[1] = random_values[1]
-        share2[2] = random_values[2]
-        share2[3] = random_values[3] 
-
+        state = [refresh(column) for column in state]
         round_key_tmp = [round_keys[(i+1)*4 + 0], round_keys[(i+1)*4 + 1], round_keys[(i+1)*4 + 2], round_keys[(i+1)*4 + 3]]
-        share1_tmp    = [share1[0], share1[1], share1[2], share1[3]]
-        share2_tmp    = [share2[0], share2[1], share2[2], share2[3]]
 
-        round_key_tmp[0] = aes32dsmi(share1_tmp[0], share2_tmp[0], round_key_tmp[0], bs = BYTE0)
-        round_key_tmp[0] = aes32dsmi(share1_tmp[3], share2_tmp[3], round_key_tmp[0], bs = BYTE1)
-        round_key_tmp[0] = aes32dsmi(share1_tmp[2], share2_tmp[2], round_key_tmp[0], bs = BYTE2)
-        share1[0]        = aes32dsmi(share1_tmp[1], share2_tmp[1], round_key_tmp[0], bs = BYTE3)
+        round_key_tmp[0] = aes32dsmi(state[0], round_key_tmp[0], bs = BYTE0)
+        round_key_tmp[0] = aes32dsmi(state[3], round_key_tmp[0], bs = BYTE1)
+        round_key_tmp[0] = aes32dsmi(state[2], round_key_tmp[0], bs = BYTE2)
+        round_key_tmp[0] = aes32dsmi(state[1], round_key_tmp[0], bs = BYTE3)
 
-        round_key_tmp[1] = aes32dsmi(share1_tmp[1], share2_tmp[1], round_key_tmp[1], bs = BYTE0)
-        round_key_tmp[1] = aes32dsmi(share1_tmp[0], share2_tmp[0], round_key_tmp[1], bs = BYTE1)
-        round_key_tmp[1] = aes32dsmi(share1_tmp[3], share2_tmp[3], round_key_tmp[1], bs = BYTE2)
-        share1[1]        = aes32dsmi(share1_tmp[2], share2_tmp[2], round_key_tmp[1], bs = BYTE3)
+        round_key_tmp[1] = aes32dsmi(state[1], round_key_tmp[1], bs = BYTE0)
+        round_key_tmp[1] = aes32dsmi(state[0], round_key_tmp[1], bs = BYTE1)
+        round_key_tmp[1] = aes32dsmi(state[3], round_key_tmp[1], bs = BYTE2)
+        round_key_tmp[1] = aes32dsmi(state[2], round_key_tmp[1], bs = BYTE3)
 
-        round_key_tmp[2] = aes32dsmi(share1_tmp[2], share2_tmp[2], round_key_tmp[2], bs = BYTE0)
-        round_key_tmp[2] = aes32dsmi(share1_tmp[1], share2_tmp[1], round_key_tmp[2], bs = BYTE1)
-        round_key_tmp[2] = aes32dsmi(share1_tmp[0], share2_tmp[0], round_key_tmp[2], bs = BYTE2)
-        share1[2]        = aes32dsmi(share1_tmp[3], share2_tmp[3], round_key_tmp[2], bs = BYTE3)
-        
-        round_key_tmp[3] = aes32dsmi(share1_tmp[3], share2_tmp[3], round_key_tmp[3], bs = BYTE0)
-        round_key_tmp[3] = aes32dsmi(share1_tmp[2], share2_tmp[2], round_key_tmp[3], bs = BYTE1)
-        round_key_tmp[3] = aes32dsmi(share1_tmp[1], share2_tmp[1], round_key_tmp[3], bs = BYTE2)
-        share1[3]        = aes32dsmi(share1_tmp[0], share2_tmp[0], round_key_tmp[3], bs = BYTE3)
+        round_key_tmp[2] = aes32dsmi(state[2], round_key_tmp[2], bs = BYTE0)
+        round_key_tmp[2] = aes32dsmi(state[1], round_key_tmp[2], bs = BYTE1)
+        round_key_tmp[2] = aes32dsmi(state[0], round_key_tmp[2], bs = BYTE2)
+        round_key_tmp[2] = aes32dsmi(state[3], round_key_tmp[2], bs = BYTE3)
 
-    random_values = [random.randint(0, 2**(31)-1) for _ in range(4)]
-    share1[0]^= random_values[0]
-    share1[1]^= random_values[1]
-    share1[2]^= random_values[2]
-    share1[3]^= random_values[3]
+        round_key_tmp[3] = aes32dsmi(state[3], round_key_tmp[3], bs = BYTE0)
+        round_key_tmp[3] = aes32dsmi(state[2], round_key_tmp[3], bs = BYTE1)
+        round_key_tmp[3] = aes32dsmi(state[1], round_key_tmp[3], bs = BYTE2)
+        round_key_tmp[3] = aes32dsmi(state[0], round_key_tmp[3], bs = BYTE3)
 
-    share2[0] = random_values[0]
-    share2[1] = random_values[1]
-    share2[2] = random_values[2]
-    share2[3] = random_values[3] 
+        state = round_key_tmp
 
+    state = [refresh(column) for column in state]
     round_key_tmp = [round_keys[0], round_keys[1], round_keys[2], round_keys[3]]
-    share1_tmp    = [share1[0], share1[1], share1[2], share1[3]]
-    share2_tmp    = [share2[0], share2[1], share2[2], share2[3]]
 
-    round_key_tmp[0] = aes32dsi(share1_tmp[0], share2_tmp[0], round_key_tmp[0], bs = BYTE0)
-    round_key_tmp[0] = aes32dsi(share1_tmp[3], share2_tmp[3], round_key_tmp[0], bs = BYTE1)
-    round_key_tmp[0] = aes32dsi(share1_tmp[2], share2_tmp[2], round_key_tmp[0], bs = BYTE2)
-    share1[0]        = aes32dsi(share1_tmp[1], share2_tmp[1], round_key_tmp[0], bs = BYTE3)
+    round_key_tmp[0] = aes32dsi(state[0], round_key_tmp[0], bs = BYTE0)
+    round_key_tmp[0] = aes32dsi(state[3], round_key_tmp[0], bs = BYTE1)
+    round_key_tmp[0] = aes32dsi(state[2], round_key_tmp[0], bs = BYTE2)
+    round_key_tmp[0] = aes32dsi(state[1], round_key_tmp[0], bs = BYTE3)
 
-    round_key_tmp[1] = aes32dsi(share1_tmp[1], share2_tmp[1], round_key_tmp[1], bs = BYTE0)
-    round_key_tmp[1] = aes32dsi(share1_tmp[0], share2_tmp[0], round_key_tmp[1], bs = BYTE1)
-    round_key_tmp[1] = aes32dsi(share1_tmp[3], share2_tmp[3], round_key_tmp[1], bs = BYTE2)
-    share1[1]        = aes32dsi(share1_tmp[2], share2_tmp[2], round_key_tmp[1], bs = BYTE3)
+    round_key_tmp[1] = aes32dsi(state[1], round_key_tmp[1], bs = BYTE0)
+    round_key_tmp[1] = aes32dsi(state[0], round_key_tmp[1], bs = BYTE1)
+    round_key_tmp[1] = aes32dsi(state[3], round_key_tmp[1], bs = BYTE2)
+    round_key_tmp[1] = aes32dsi(state[2], round_key_tmp[1], bs = BYTE3)
 
-    round_key_tmp[2] = aes32dsi(share1_tmp[2], share2_tmp[2], round_key_tmp[2], bs = BYTE0)
-    round_key_tmp[2] = aes32dsi(share1_tmp[1], share2_tmp[1], round_key_tmp[2], bs = BYTE1)
-    round_key_tmp[2] = aes32dsi(share1_tmp[0], share2_tmp[0], round_key_tmp[2], bs = BYTE2)
-    share1[2]        = aes32dsi(share1_tmp[3], share2_tmp[3], round_key_tmp[2], bs = BYTE3)
-    
-    round_key_tmp[3] = aes32dsi(share1_tmp[3], share2_tmp[3], round_key_tmp[3], bs = BYTE0)
-    round_key_tmp[3] = aes32dsi(share1_tmp[2], share2_tmp[2], round_key_tmp[3], bs = BYTE1)
-    round_key_tmp[3] = aes32dsi(share1_tmp[1], share2_tmp[1], round_key_tmp[3], bs = BYTE2)
-    share1[3]        = aes32dsi(share1_tmp[0], share2_tmp[0], round_key_tmp[3], bs = BYTE3)
+    round_key_tmp[2] = aes32dsi(state[2], round_key_tmp[2], bs = BYTE0)
+    round_key_tmp[2] = aes32dsi(state[1], round_key_tmp[2], bs = BYTE1)
+    round_key_tmp[2] = aes32dsi(state[0], round_key_tmp[2], bs = BYTE2)
+    round_key_tmp[2] = aes32dsi(state[3], round_key_tmp[2], bs = BYTE3)
 
-    return share1
+    round_key_tmp[3] = aes32dsi(state[3], round_key_tmp[3], bs = BYTE0)
+    round_key_tmp[3] = aes32dsi(state[2], round_key_tmp[3], bs = BYTE1)
+    round_key_tmp[3] = aes32dsi(state[1], round_key_tmp[3], bs = BYTE2)
+    round_key_tmp[3] = aes32dsi(state[0], round_key_tmp[3], bs = BYTE3)
+
+    return [unmask(column) for column in round_key_tmp]
 
 
 
@@ -228,8 +203,8 @@ def main():
     key_length  = 128
     keys_new    = KeyScheduler(key, key_length)
     cipher      = encrypt(column_i, keys_new, key_length)
-    plaintext   = decrypt(cipher, keys_new, key_length)
-    
+    plaintext   = decrypt(cipher, InvMixColKey(keys_new, key_length), key_length)
+
     print(f"\nIs encryption/decryption correct? {plaintext == column_i}")
     print(f"{plaintext[0]:08x}, {plaintext[1]:08x}, {plaintext[2]:08x}, {plaintext[3]:08x}")
     print(f"{column_i[0]:08x}, {column_i[1]:08x}, {column_i[2]:08x}, {column_i[3]:08x}")

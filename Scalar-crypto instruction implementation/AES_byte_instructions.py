@@ -12,7 +12,7 @@ def aes(rs1, rs2: int, bs: int, dec: bool, mid: bool, enable_print:bool = False)
     assert(bs <= 3)
     assert(rs1 <= 2**256 - 1)
 
-    byte = (rs2 >> ((3-bs)*8) )& 0xFF
+    byte = (rs2 >> (bs*8)) & 0xFF
     printf(f"sel_byte = {byte:x}", enable_print)
     printf(f"bs = {bs}", enable_print)
     
@@ -35,8 +35,6 @@ def aes(rs1, rs2: int, bs: int, dec: bool, mid: bool, enable_print:bool = False)
               (result&0x0000FFFF) << 16 |  (result&0xFFFF0000) >> 16 if bs == 2 else \
               (result&0x000000FF) << 24 |  (result&0xFFFFFF00) >> 8  if bs == 3 else -1
 
-    rot = (rotated & 0xFF000000) >> 24 | (rotated & 0x00FF0000) >> 8 | (rotated & 0x0000FF00) << 8 | (rotated & 0x000000FF) << 24
-    rotated = rot
     assert rotated != -1
     printf(f"rotated = {rotated:08x}", enable_print)
 
